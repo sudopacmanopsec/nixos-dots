@@ -1,0 +1,8 @@
+configuration { modi: "drun,run"; font: "JetBrainsMono Nerd Font 11"; show-icons: false; }
+* { bg: #11111bee; fg: #cdd6f4; accent: #89b4fa; }
+window { background-color: @bg; border: 2px; border-color: @accent; border-radius: 8px; width: 480px; }
+mainbox { background-color: transparent; padding: 10px; }
+inputbar, prompt, entry { background-color: transparent; text-color: @fg; }
+listview { background-color: transparent; lines: 8; }
+element { background-color: transparent; text-color: @fg; padding: 4px; }
+element selected { background-color: @accent; text-color: #11111b; border-radius: 4px; }
