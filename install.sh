@@ -50,7 +50,7 @@ G
     ;;
     password) cat >&2 <<'G'
 Fix: the system is installed; just set the password:
-  nixos-enter --root /mnt -c 'passwd USER'     (and `passwd root` if you skipped it)
+  nixos-enter --root /mnt -c 'passwd USER'     (and `passwd root` if you want a root password)
 G
     ;;
     switch) cat >&2 <<'G'
@@ -140,11 +140,18 @@ nix eval --raw ".#nixosConfigurations.\"$H\".config.system.build.toplevel.drvPat
 
 if [[ $MODE == install ]]; then
   STAGE=build
-  say "nixos-install (it will ask for a ROOT password)"
-  nixos-install --root "$MNT" --flake ".#$H"
+  say "nixos-install"
+  nixos-install --root "$MNT" --flake ".#$H" --no-root-passwd
   STAGE=password
-  say "setting password for $U"
+  ask() { local a; read -rp "$1 [Y/n] " a; [[ ${a:-y} == [yY]* ]]; }
+  if ask "Set ROOT password now?"; then nixos-enter --root "$MNT" -c "passwd root"; fi
+  say "password for $U (needed to log in)"
   nixos-enter --root "$MNT" -c "passwd $U"
+  while ask "Add another user?"; do
+    read -rp "  username: " X
+    [[ $X =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo "  invalid name"; continue; }
+    nixos-enter --root "$MNT" -c "useradd -m -G wheel,video,audio,input,networkmanager $X && passwd $X" || echo "  failed, skipping $X"
+  done
   say "copying repo to $MNT$REPO_DIR"
   mkdir -p "$MNT$REPO_DIR"; cp -a "$REPO"/. "$MNT$REPO_DIR"/
   nixos-enter --root "$MNT" -c "chown -R $U:users /home/$U" || true
