@@ -1,18 +1,74 @@
 #!/usr/bin/env bash
 # Usage:
-#   HOSTNAME=desktop USERNAME=haadi GPU=nvidia DOTFILES=owner/repo ./install.sh
-# Vars: HOSTNAME USERNAME GPU(amd|nvidia) [DOTFILES=owner/repo|url] [NVIDIA_OPEN=true|false]
+#   HOSTNAME=desktop USERNAME=haadi GPU=nvidia ./install.sh
+# Vars: HOSTNAME USERNAME GPU(amd|nvidia) [NVIDIA_OPEN=true|false]
 #       [BOOT_DISK=/dev/sdX (BIOS only)] [STATE_VERSION=26.05] [MODE=install|switch] [MNT=/mnt]
 #       [YES=1 skip prompt] [DRY_RUN=1 only generate files]
-set -euo pipefail
+set -eEuo pipefail
 shopt -u patsub_replacement 2>/dev/null || true
 cd "$(dirname "$(readlink -f "$0")")"
 REPO=$PWD
 
+STAGE=start
+fail() {
+  local rc=$? ; trap - ERR
+  cat >&2 <<MSG
+
+!! install failed at stage: $STAGE (exit $rc)
+Nothing is half-finished that a re-run can't fix. Re-run the SAME command after fixing:
+  cd $REPO && HOSTNAME=$H USERNAME=$U GPU=$GPU ./install.sh
+
+MSG
+  case $STAGE in
+    mount) cat >&2 <<'G'
+Fix: mount your disks first (example, adjust devices):
+  mkfs.ext4 -L nixos /dev/sdX4 ; mkfs.fat -F32 /dev/sdX1 ; mkswap /dev/sdX2
+  mount /dev/disk/by-label/nixos /mnt ; mkdir -p /mnt/boot ; mount /dev/sdX1 /mnt/boot ; swapon /dev/sdX2
+G
+    ;;
+    hardware) cat >&2 <<'G'
+Fix: check `findmnt /mnt` shows root + /boot, then re-run. Manual: nixos-generate-config --root /mnt --show-hardware-config > modules/hosts/_hardware-HOST.nix
+G
+    ;;
+    eval) cat >&2 <<'G'
+Fix: it's a config error, not your machine. Read the error above (add --show-trace for detail:
+  nix eval --show-trace .#nixosConfigurations.HOST.config.system.build.toplevel.drvPath )
+Edit the file it names, `git add -A`, re-run. A "path ... does not exist"/missing option error usually means an untracked file: git add -A.
+G
+    ;;
+    build) cat >&2 <<'G'
+Fix: usually network or space. Check `ping -c1 cache.nixos.org` and `df -h /mnt /`. On the ISO the live
+store is RAM-backed: add swap (swapon) or mount more space, then re-run (finished downloads are kept).
+Offline/flaky DNS: nmcli / wpa_supplicant first.
+G
+    ;;
+    bootloader) cat >&2 <<'G'
+Fix: system built but bootloader failed. Check /mnt/boot is the FAT ESP and `ls /sys/firmware/efi` exists (UEFI),
+then:  nixos-enter --root /mnt -c 'NIXOS_INSTALL_BOOTLOADER=1 /nix/var/nix/profiles/system/bin/switch-to-configuration boot'
+BIOS machine: re-run with BOOT_DISK=/dev/sdX.
+G
+    ;;
+    password) cat >&2 <<'G'
+Fix: the system is installed; just set the password:
+  nixos-enter --root /mnt -c 'passwd USER'     (and `passwd root` if you skipped it)
+G
+    ;;
+    switch) cat >&2 <<'G'
+Fix: your running system is unchanged. Read the error, retry with --show-trace:
+  nixos-rebuild switch --flake .#HOST --show-trace
+Back out of a bad switch:  nixos-rebuild switch --rollback   (or pick an older generation at boot)
+G
+    ;;
+  esac
+  echo "Still stuck? Paste the full output of the failing step." >&2
+  exit "$rc"
+}
+trap fail ERR
+
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-H=${HOSTNAME:-}; U=${USERNAME:-}; GPU=${GPU:-}; DOTFILES=${DOTFILES:-}
+H=${HOSTNAME:-}; U=${USERNAME:-}; GPU=${GPU:-}
 MODE=${MODE:-auto}; MNT=${MNT:-/mnt}; STATE_VERSION=${STATE_VERSION:-26.05}
 NVIDIA_OPEN=${NVIDIA_OPEN:-true}; BOOT_DISK=${BOOT_DISK:-}; DRY_RUN=${DRY_RUN:-0}; YES=${YES:-0}
 
@@ -20,24 +76,19 @@ NVIDIA_OPEN=${NVIDIA_OPEN:-true}; BOOT_DISK=${BOOT_DISK:-}; DRY_RUN=${DRY_RUN:-0
 [[ $U =~ ^[a-z_][a-z0-9_-]*$ && $U != root ]] || die "set USERNAME=<lowercase user>"
 [[ $GPU == amd || $GPU == nvidia ]] || die "set GPU=amd or GPU=nvidia"
 
+STAGE=mount
 if [[ $MODE == auto ]]; then
   if mountpoint -q "$MNT" 2>/dev/null; then MODE=install; else MODE=switch; fi
 fi
 [[ $MODE == install || $MODE == switch ]] || die "MODE must be install or switch"
 if [[ $MODE == install && $DRY_RUN != 1 ]]; then
-  mountpoint -q "$MNT" || die "$MNT is not mounted (mount root at $MNT and ESP at $MNT/boot first)"
+  mountpoint -q "$MNT" || { echo "$MNT is not mounted" >&2; false; }
   command -v nixos-install >/dev/null || die "nixos-install not found (run from the NixOS ISO)"
 fi
 
-# dotfiles location + repo location (as seen on the final system)
+# repo location + bundled dotfiles (as seen on the final system)
 if [[ $MODE == install ]]; then REPO_DIR=/home/$U/nixos-dots; else REPO_DIR=$REPO; fi
-if [[ -n $DOTFILES ]]; then
-  [[ $DOTFILES =~ ^[^/:]+/[^/:]+$ ]] && DOTFILES_URL=https://github.com/$DOTFILES.git || DOTFILES_URL=$DOTFILES
-  DOTFILES_DIR=/home/$U/.dotfiles
-else
-  DOTFILES_URL=
-  DOTFILES_DIR=$REPO_DIR/dotfiles
-fi
+DOTFILES_DIR=$REPO_DIR/dotfiles
 
 # per-host extras (BIOS boot, NVIDIA open modules)
 EXTRA=""
@@ -54,7 +105,7 @@ fi
 cat <<MSG
 host=$H user=$U gpu=$GPU mode=$MODE
 repo on disk: $REPO_DIR
-dotfiles:     $DOTFILES_DIR ${DOTFILES_URL:+(cloned from $DOTFILES_URL)}
+configs:      $DOTFILES_DIR (bundled, live-editable)
 MSG
 if [[ $YES != 1 && $DRY_RUN != 1 ]]; then
   read -rp "Continue? [y/N] " a; [[ $a == [yY]* ]] || exit 1
@@ -69,6 +120,7 @@ tpl=${tpl//@REPO_DIR@/$REPO_DIR}; tpl=${tpl//@EXTRA@/${EXTRA%$'\n'}}
 printf '%s\n' "$tpl" > "modules/hosts/$H.nix"
 
 # ---- hardware config ----
+STAGE=hardware
 HW=modules/hosts/_hardware-$H.nix
 if [[ $DRY_RUN == 1 ]] || ! command -v nixos-generate-config >/dev/null; then
   say "no nixos-generate-config / dry run: writing placeholder $HW"
@@ -87,21 +139,16 @@ fi
 [[ -d .git ]] || git init -q -b main
 git add -A
 
-# ---- dotfiles repo ----
-if [[ -n $DOTFILES_URL ]]; then
-  target=$DOTFILES_DIR; [[ $MODE == install ]] && target=$MNT$DOTFILES_DIR
-  if [[ -d $target/.git ]]; then say "dotfiles already at $target"; else
-    say "cloning $DOTFILES_URL"; mkdir -p "$(dirname "$target")"; git clone "$DOTFILES_URL" "$target"
-  fi
-fi
-
+STAGE=eval
 export NIX_CONFIG="experimental-features = nix-command flakes"
 say "evaluating (catches errors before building)"
 nix eval --raw ".#nixosConfigurations.\"$H\".config.system.build.toplevel.drvPath" >/dev/null
 
 if [[ $MODE == install ]]; then
+  STAGE=build
   say "nixos-install (it will ask for a ROOT password)"
   nixos-install --root "$MNT" --flake ".#$H"
+  STAGE=password
   say "setting password for $U"
   nixos-enter --root "$MNT" -c "passwd $U"
   say "copying repo to $MNT$REPO_DIR"
@@ -109,6 +156,7 @@ if [[ $MODE == install ]]; then
   nixos-enter --root "$MNT" -c "chown -R $U:users /home/$U" || true
   say "done -- reboot"
 else
+  STAGE=switch
   say "nixos-rebuild switch"
   if [[ $EUID -eq 0 ]]; then r=""; elif command -v doas >/dev/null; then r=doas; else r=sudo; fi
   $r nixos-rebuild switch --flake ".#$H"
