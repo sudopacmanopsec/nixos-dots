@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Usage:
 #   HOSTNAME=desktop USERNAME=haadi GPU=nvidia ./install.sh
-# Vars: HOSTNAME USERNAME GPU(amd|nvidia) [NVIDIA_OPEN=true|false]
+# Vars: HOSTNAME USERNAME GPU(amd|nvidia|virtualbox) [NVIDIA_OPEN=true|false]
 #       [BOOT_DISK=/dev/sdX (BIOS only)] [STATE_VERSION=26.05] [MODE=install|switch] [MNT=/mnt]
 #       [YES=1 skip prompt] [DRY_RUN=1 only generate files]
 set -eEuo pipefail
@@ -74,7 +74,7 @@ NVIDIA_OPEN=${NVIDIA_OPEN:-true}; BOOT_DISK=${BOOT_DISK:-}; DRY_RUN=${DRY_RUN:-0
 
 [[ $H =~ ^[a-zA-Z0-9][a-zA-Z0-9-]*$ ]] || die "set HOSTNAME=<name>"
 [[ $U =~ ^[a-z_][a-z0-9_-]*$ && $U != root ]] || die "set USERNAME=<lowercase user>"
-[[ $GPU == amd || $GPU == nvidia ]] || die "set GPU=amd or GPU=nvidia"
+[[ $GPU == amd || $GPU == nvidia || $GPU == virtualbox ]] || die "set GPU=amd, nvidia or virtualbox"
 
 STAGE=mount
 if [[ $MODE == auto ]]; then
