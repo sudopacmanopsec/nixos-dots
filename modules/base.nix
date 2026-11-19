@@ -3,7 +3,6 @@
   flake.modules.nixos.base = { lib, pkgs, config, ... }: {
     options.my = {
       username = lib.mkOption { type = lib.types.str; description = "primary user"; };
-      dotfiles = lib.mkOption { type = lib.types.str; description = "dir holding mango/ waybar/ rofi/ foot/ mako/ (live-symlinked)"; };
       repo = lib.mkOption { type = lib.types.str; description = "where this flake lives on disk (for the rebuild alias)"; };
     };
 

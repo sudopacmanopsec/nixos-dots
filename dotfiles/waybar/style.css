@@ -1,7 +1,0 @@
-* { font-family: "JetBrainsMono Nerd Font"; font-size: 13px; border: none; border-radius: 0; }
-window#waybar { background: #11111b; color: #cdd6f4; }
-#tags button { padding: 0 8px; color: #6c7086; background: transparent; }
-#tags button.occupied { color: #cdd6f4; }
-#tags button.focused { color: #11111b; background: #89b4fa; }
-#tags button.urgent { color: #11111b; background: #f38ba8; }
-#clock, #cpu, #memory, #network, #pulseaudio, #tray, #window { padding: 0 10px; }

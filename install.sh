@@ -86,9 +86,8 @@ if [[ $MODE == install && $DRY_RUN != 1 ]]; then
   command -v nixos-install >/dev/null || die "nixos-install not found (run from the NixOS ISO)"
 fi
 
-# repo location + bundled dotfiles (as seen on the final system)
+# repo location (as seen on the final system)
 if [[ $MODE == install ]]; then REPO_DIR=/home/$U/nixos-dots; else REPO_DIR=$REPO; fi
-DOTFILES_DIR=$REPO_DIR/dotfiles
 
 # per-host extras (BIOS boot, NVIDIA open modules)
 EXTRA=""
@@ -105,7 +104,6 @@ fi
 cat <<MSG
 host=$H user=$U gpu=$GPU mode=$MODE
 repo on disk: $REPO_DIR
-configs:      $DOTFILES_DIR (bundled, live-editable)
 MSG
 if [[ $YES != 1 && $DRY_RUN != 1 ]]; then
   read -rp "Continue? [y/N] " a; [[ $a == [yY]* ]] || exit 1
@@ -115,7 +113,7 @@ fi
 say "writing modules/hosts/$H.nix"
 tpl=$(<templates/host.nix)
 tpl=${tpl//@HOSTNAME@/$H}; tpl=${tpl//@USERNAME@/$U}; tpl=${tpl//@GPU_MODULE@/gpu-$GPU}
-tpl=${tpl//@STATE_VERSION@/$STATE_VERSION}; tpl=${tpl//@DOTFILES_DIR@/$DOTFILES_DIR}
+tpl=${tpl//@STATE_VERSION@/$STATE_VERSION};
 tpl=${tpl//@REPO_DIR@/$REPO_DIR}; tpl=${tpl//@EXTRA@/${EXTRA%$'\n'}}
 printf '%s\n' "$tpl" > "modules/hosts/$H.nix"
 

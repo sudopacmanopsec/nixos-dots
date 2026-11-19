@@ -17,12 +17,11 @@ in
       ({ lib, ... }: {
         networking.hostName = "@HOSTNAME@";
         my.username = "@USERNAME@";
-        my.dotfiles = "@DOTFILES_DIR@";
         my.repo = "@REPO_DIR@";
         system.stateVersion = "@STATE_VERSION@";
 @EXTRA@
         home-manager.users."@USERNAME@" = {
-          imports = [ hm.mango hm.daily hm.cli hm.dotfiles ];
+          imports = [ hm.mango hm.daily hm.cli ];
           home.stateVersion = "@STATE_VERSION@";
         };
       })
