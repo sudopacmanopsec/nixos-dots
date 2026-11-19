@@ -2,7 +2,7 @@
 # Usage:
 #   HOSTNAME=desktop USERNAME=haadi GPU=nvidia ./install.sh
 # Vars: HOSTNAME USERNAME GPU(amd|nvidia|virtualbox) [NVIDIA_OPEN=true|false]
-#       [BOOT_DISK=/dev/sdX (BIOS only)] [STATE_VERSION=26.05] [MODE=install|switch] [MNT=/mnt]
+#       [STATE_VERSION=26.05] [MODE=install|switch] [MNT=/mnt]
 #       [YES=1 skip prompt] [DRY_RUN=1 only generate files]
 set -eEuo pipefail
 shopt -u patsub_replacement 2>/dev/null || true
@@ -45,7 +45,7 @@ G
     bootloader) cat >&2 <<'G'
 Fix: system built but bootloader failed. Check /mnt/boot is the FAT ESP and `ls /sys/firmware/efi` exists (UEFI),
 then:  nixos-enter --root /mnt -c 'NIXOS_INSTALL_BOOTLOADER=1 /nix/var/nix/profiles/system/bin/switch-to-configuration boot'
-BIOS machine: re-run with BOOT_DISK=/dev/sdX.
+Not booted in UEFI mode? Enable EFI in firmware/VM settings and reboot the ISO.
 G
     ;;
     password) cat >&2 <<'G'
@@ -70,7 +70,7 @@ die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 H=${HOSTNAME:-}; U=${USERNAME:-}; GPU=${GPU:-}
 MODE=${MODE:-auto}; MNT=${MNT:-/mnt}; STATE_VERSION=${STATE_VERSION:-26.05}
-NVIDIA_OPEN=${NVIDIA_OPEN:-true}; BOOT_DISK=${BOOT_DISK:-}; DRY_RUN=${DRY_RUN:-0}; YES=${YES:-0}
+NVIDIA_OPEN=${NVIDIA_OPEN:-true}; DRY_RUN=${DRY_RUN:-0}; YES=${YES:-0}
 
 [[ $H =~ ^[a-zA-Z0-9][a-zA-Z0-9-]*$ ]] || die "set HOSTNAME=<name>"
 [[ $U =~ ^[a-z_][a-z0-9_-]*$ && $U != root ]] || die "set USERNAME=<lowercase user>"
@@ -89,15 +89,11 @@ fi
 # repo location (as seen on the final system)
 if [[ $MODE == install ]]; then REPO_DIR=/home/$U/nixos-dots; else REPO_DIR=$REPO; fi
 
-# per-host extras (BIOS boot, NVIDIA open modules)
+# UEFI only (systemd-boot)
+[[ -d /sys/firmware/efi || $DRY_RUN == 1 ]] || { echo "not booted in UEFI mode: enable EFI in your firmware/VM settings and reboot the ISO" >&2; STAGE=bootloader; false; }
+
+# per-host extras (NVIDIA open modules)
 EXTRA=""
-if [[ ! -d /sys/firmware/efi && $MODE == install || ( $MODE == switch && ! -d /sys/firmware/efi ) ]]; then
-  [[ -n $BOOT_DISK ]] || die "legacy BIOS detected: set BOOT_DISK=/dev/sdX"
-  EXTRA+="        boot.loader.systemd-boot.enable = lib.mkForce false;
-        boot.loader.efi.canTouchEfiVariables = lib.mkForce false;
-        boot.loader.grub = { enable = true; device = \"$BOOT_DISK\"; };
-"
-fi
 [[ $GPU == nvidia && $NVIDIA_OPEN == false ]] && EXTRA+="        my.nvidia.open = false;
 "
 
